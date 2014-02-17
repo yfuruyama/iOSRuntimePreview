@@ -10,49 +10,59 @@ example: inscode MyViewController.m:32 \'NSLog(@"Hi There!");\'
 
 
 class InsCode(object):
-    def __init__(self, session):
+    def __init__(self, session, file_name, line):
         self.session = session
+        self.file_name = file_name
+        self.line = line
 
-    def insert(self, file_name, line_num, code):
+    def insert(self, code):
         """ Insert a new code into an appropriate position """
-        target = lldb.debugger.GetSelectedTarget()
-        bp = target.BreakpointCreateByLocation(file_name, line_num)
+        key = self.get_session_key()
+        if not self.session.get(key):
+            target = lldb.debugger.GetSelectedTarget()
+            bp = target.BreakpointCreateByLocation(self.file_name, self.line)
+            # set breakpoint hit callback
+            handler = 'inscode.execute'
+            command = ('breakpoint command add -s python -o '
+                       '"%s(frame, bp_loc, internal_dict)" %s'
+                       ) % (handler, bp.GetID())
+            lldb.debugger.HandleCommand(command)
 
-        key = self._get_bp_code_map_key(bp)
-        self.session[key] = code
+        self.session.setdefault(key, []).append(code)
 
-        # set breakpoint hit callback for handling breakpoint stop event
-        handler = 'inscode.execute'
-        command = 'breakpoint command add -F %s %s' % (handler, bp.GetID())
-        lldb.debugger.HandleCommand(command)
+        print 'Inserted \'%s\' at %s:%s' % (code, self.file_name, self.line)
 
-    def execute(self, bp):
-        """ Execute an inserted code """
-        key = self._get_bp_code_map_key(bp)
-        code = self.session[key]
+    def execute(self, frame, codes):
+        """ Execute an inserted codes """
+        return [self._eval(frame, code) for code in codes]
 
-        # objc message expression needs to be cast to void
-        if code.startswith('['):
-            self._eval("(void)%s" % code)
+    def _eval(self, frame, expression):
+        # return frame.EvaluateExpression(expression)
+        return lldb.debugger.HandleCommand('po %s' % expression)
 
-        # not message expression
-        else:
-            self._eval("%s" % code)
-
-    def _eval(self, expression):
-        thread = lldb.debugger.GetSelectedTarget().GetProcess().GetSelectedThread()
-        frame = thread.frames[0]
-        return frame.EvaluateExpression(expression)
-
-    def _get_bp_code_map_key(self, bp):
-        return '_inscode_bp_%s' % bp.GetID() 
+    def get_session_key(self):
+        return '_inscode_%s_%s' % (self.file_name, self.line)
 
 
 def execute(frame, location, session):
-    """ breakpoint hit callback handler """
-    inscode = InsCode(session)
-    inscode.execute(location.GetBreakpoint())
-    return False  # Don't stop at breakpoint
+    """ breakpoint hit callback handler
+    
+    cf.) lldb/source/Interpreter/ScriptInterpreterPython.cpp
+    # ScriptInterpreterPython::GenerateBreakpointCommandCallbackData
+    """
+    line_entry = frame.GetLineEntry()
+    file_name = line_entry.GetFileSpec().GetFilename()
+    line = line_entry.GetLine()
+
+    inscode = InsCode(session, file_name, line)
+    key = inscode.get_session_key()
+    codes = inscode.session.get(key)
+
+    # execute inserted codes!
+    values = inscode.execute(frame, codes)
+
+    # Don't stop at breakpoint
+    frame.GetThread().GetProcess().Continue()
 
 
 def inscode(debugger, command, result, internal_dict):
@@ -61,10 +71,11 @@ def inscode(debugger, command, result, internal_dict):
         print USAGE
         return
 
-    (file_name, line_num) = args[0].split(':')
-    inscode = InsCode(internal_dict)
-    inscode.insert(file_name, int(line_num), args[1])
+    (file_name, line) = args[0].split(':')
+    inscode = InsCode(internal_dict, file_name, int(line))
+    inscode.insert(args[1])
 
 
 def __lldb_init_module(debugger, dict):
     debugger.HandleCommand('command script add -f inscode.inscode inscode')
+    print 'inscode loaded.'
