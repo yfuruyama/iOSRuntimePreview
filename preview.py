@@ -7,12 +7,56 @@ import threading
 import difflib
 
 USAGE = """
-usage: preview <file path from project directory>
-example: preview MyViewController.m'
+Usage: preview <file path from project directory>
+Example: preview MyViewController.m
 """
 
 NAMESPACE = '__preview'
 log_path = None
+
+
+class Executor(object):
+    def __init__(self, frame, line, mod_units):
+        self.frame = frame
+        self.line = line
+        self.mod_units = mod_units
+
+    def execute(self):
+        jump = 0
+        statuses = []
+        for mod_unit in self.mod_units:
+            if mod_unit.is_delete():
+                jump += 1
+                continue
+            statuses.append(self._eval(self.frame, mod_unit.code))
+
+        if jump > 0:
+            self.jump_to_line(self.line + jump)
+        return statuses
+
+    def jump_to_line(self, line):
+        log('Executor jumps to line: %s' % line)
+        context = self.frame.GetSymbolContext(lldb.eSymbolContextEverything)
+        if context and context.GetCompileUnit():
+            compile_unit = context.GetCompileUnit()
+            line_index = compile_unit.FindLineEntryIndex(
+                0, line, compile_unit.GetFileSpec(), False
+                )
+            line_entry = compile_unit.GetLineEntryAtIndex(line_index)
+            self._jump_to_line_entry(line_entry)
+
+    def _jump_to_line_entry(self, line_entry):
+        if line_entry and line_entry.GetStartAddress().IsValid():
+            target = lldb.debugger.GetSelectedTarget()
+            addr = line_entry.GetStartAddress().GetLoadAddress(target)
+            if addr != lldb.LLDB_INVALID_ADDRESS:
+                # set program counter
+                self.frame.SetPC(addr)
+
+    def _eval(self, frame, expression):
+        log('Executor executes code: %s' % expression)
+        # return frame.EvaluateExpression(expression)
+        return lldb.debugger.HandleCommand('po %s' % expression)
 
 
 class ModificationManager(object):
@@ -81,50 +125,6 @@ class ModificationUnit(object):
 
     def is_delete(self):
         return not self.is_insert()
-
-
-class Executor(object):
-    def __init__(self, frame, line, mod_units):
-        self.frame = frame
-        self.line = line
-        self.mod_units = mod_units
-
-    def execute(self):
-        jump = 0
-        statuses = []
-        for mod_unit in self.mod_units:
-            if mod_unit.is_delete():
-                jump += 1
-                continue
-            statuses.append(self._eval(self.frame, mod_unit.code))
-
-        if jump > 0:
-            self.jump_to_line(self.line + jump)
-        return statuses
-
-    def jump_to_line(self, line):
-        log('Executor jumps to line: %s' % line)
-        context = self.frame.GetSymbolContext(lldb.eSymbolContextEverything)
-        if context and context.GetCompileUnit():
-            compile_unit = context.GetCompileUnit()
-            line_index = compile_unit.FindLineEntryIndex(
-                0, line, compile_unit.GetFileSpec(), False
-                )
-            line_entry = compile_unit.GetLineEntryAtIndex(line_index)
-            self._jump_to_line_entry(line_entry)
-
-    def _jump_to_line_entry(self, line_entry):
-        if line_entry and line_entry.GetStartAddress().IsValid():
-            target = lldb.debugger.GetSelectedTarget()
-            addr = line_entry.GetStartAddress().GetLoadAddress(target)
-            if addr != lldb.LLDB_INVALID_ADDRESS:
-                # set program counter
-                self.frame.SetPC(addr)
-
-    def _eval(self, frame, expression):
-        log('Executor executes code: %s' % expression)
-        # return frame.EvaluateExpression(expression)
-        return lldb.debugger.HandleCommand('po %s' % expression)
 
 
 class FileSystemWatcher(object):
@@ -211,8 +211,11 @@ class Differ(object):
         return diffs
 
 
+""" callback functions """
 
 def on_file_changed(file_path, orig_content, internal_dict):
+    """ file change callback handler
+    """
     with open(file_path, 'r') as fh:
         content = fh.read()
         diffs = Differ.compare(orig_content, content)
@@ -236,10 +239,7 @@ def on_breakpoint_hit(frame, location, internal_dict, line):
     """
     line_entry = frame.GetLineEntry()
     file_spec = line_entry.GetFileSpec()
-    file_name = file_spec.GetFilename()
-    file_directory = file_spec.GetDirectory()
-    file_path = os.path.join(file_directory, file_name)
-    log(location.GetAddress().GetLineEntry().GetLine())
+    file_path = get_abspath(file_spec)
 
     mod_manager = ModificationManager(internal_dict)
     entry = mod_manager.search_by_location(file_path, line)
@@ -252,35 +252,7 @@ def on_breakpoint_hit(frame, location, internal_dict, line):
     frame.GetThread().GetProcess().Continue()
 
 
-def preview(debugger, command, result, internal_dict):
-    """
-
-    Using argparse module cause Xcode crush(I don't know why...).
-    """
-    # args = shlex.split(command)
-    # if not (len(args) == 2 and len(args[0].split(':')) == 2):
-        # print USAGE
-        # return
-
-    # (file_name, line) = args[0].split(':')
-    file_name = command
-    target = debugger.GetSelectedTarget()
-    basedir = get_basedir(target, file_name)
-
-    watcher_key = '_preview_watcher'
-    if not internal_dict.get(watcher_key):
-        watcher = FileSystemWatcher(on_file_changed, internal_dict)
-        watcher.start()
-        internal_dict[watcher_key] = watcher
-
-    watcher = internal_dict[watcher_key]
-    watcher.add(os.path.join(basedir, file_name))
-
-
-def set_log_path(debugger, command, result, internal_dict):
-    global log_path
-    log_path = command
-
+""" utility functions """
 
 def log(message):
     """ Logging for debug
@@ -294,22 +266,60 @@ def log(message):
             fh.write(str(message) + '\n')
 
 
-def get_basedir(target, file_name):
-    # workaround for searching base directory
-    bp = target.BreakpointCreateByLocation(file_name, 1)
-    bp_loc = bp.GetLocationAtIndex(0)
-    basedir = bp_loc.GetAddress().GetLineEntry().GetFileSpec().GetDirectory()
-    target.BreakpointDelete(bp.GetID())
-
-    return basedir
-
-
 def is_target_process_running():
     process = lldb.debugger.GetSelectedTarget().GetProcess()
     if process.GetNumThreads() > 0:
         return True
     else:
         return False
+
+
+def get_abspath(file_spec):
+    file_name = file_spec.GetFilename()
+    directory = file_spec.GetDirectory()
+    if directory is None:
+        directory = get_basedir(file_name)
+    return os.path.join(directory, file_name)
+
+
+def get_basedir(file_name):
+    # workaround for getting base directory
+    target = lldb.debugger.GetSelectedTarget()
+    bp = target.BreakpointCreateByLocation(file_name, 1)
+    bp_loc = bp.GetLocationAtIndex(0)
+    basedir = bp_loc.GetAddress().GetLineEntry().GetFileSpec().GetDirectory()
+    target.BreakpointDelete(bp.GetID())
+    return basedir
+
+
+""" commands """
+
+def preview(debugger, command, result, internal_dict):
+    """ 'preview' command
+    """
+    if command == '-h' or command == '--help' or command == '':
+        print USAGE
+        return
+
+    file_name = command
+    file_spec = lldb.SBFileSpec(file_name)
+    file_path = get_abspath(file_spec)
+
+    watcher_key = '_preview_watcher'
+    if not internal_dict.get(watcher_key):
+        watcher = FileSystemWatcher(on_file_changed, internal_dict)
+        watcher.start()
+        internal_dict[watcher_key] = watcher
+
+    watcher = internal_dict[watcher_key]
+    watcher.add(file_path)
+    print 'Preview enabled: %s' % file_name
+
+
+def set_log_path(debugger, command, result, internal_dict):
+    global log_path
+    log_path = command
+
 
 def __lldb_init_module(debugger, internal_dict):
     debugger.HandleCommand('command script add -f preview.preview preview')
