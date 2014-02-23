@@ -15,6 +15,10 @@ NAMESPACE = '__preview'
 log_path = None
 
 
+class FileNotFoundException(Exception):
+    pass
+
+
 class Executor(object):
     def __init__(self, frame, line, mod_units):
         self.frame = frame
@@ -279,6 +283,11 @@ def get_abspath(file_spec):
     directory = file_spec.GetDirectory()
     if directory is None:
         directory = get_basedir(file_name)
+
+    # when source file specified by user is not found
+    if directory is None:
+        raise FileNotFoundException('File not found: "%s"' % file_name)
+        
     return os.path.join(directory, file_name)
 
 
@@ -303,7 +312,11 @@ def preview(debugger, command, result, internal_dict):
 
     file_name = command
     file_spec = lldb.SBFileSpec(file_name)
-    file_path = get_abspath(file_spec)
+    try:
+        file_path = get_abspath(file_spec)
+    except FileNotFoundException as err:
+        print err
+        return
     log('file path: %s' % file_path)
 
     watcher_key = '_preview_watcher'
