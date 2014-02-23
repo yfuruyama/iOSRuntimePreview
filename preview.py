@@ -7,12 +7,18 @@ import threading
 import difflib
 
 USAGE = """
-Usage: preview <file path from project directory>
+Sync specific source file with running iOS app.
+
+Symtax: preview <file>
 Example: preview MyViewController.m
 """
 
 NAMESPACE = '__preview'
 log_path = None
+
+
+class FileNotFoundException(Exception):
+    pass
 
 
 class Executor(object):
@@ -50,6 +56,7 @@ class Executor(object):
             target = lldb.debugger.GetSelectedTarget()
             addr = line_entry.GetStartAddress().GetLoadAddress(target)
             if addr != lldb.LLDB_INVALID_ADDRESS:
+                log('jump address: 0x%x' % addr)
                 # set program counter
                 self.frame.SetPC(addr)
 
@@ -279,6 +286,11 @@ def get_abspath(file_spec):
     directory = file_spec.GetDirectory()
     if directory is None:
         directory = get_basedir(file_name)
+
+    # when source file specified by user is not found
+    if directory is None:
+        raise FileNotFoundException('File not found: "%s"' % file_name)
+        
     return os.path.join(directory, file_name)
 
 
@@ -303,7 +315,12 @@ def preview(debugger, command, result, internal_dict):
 
     file_name = command
     file_spec = lldb.SBFileSpec(file_name)
-    file_path = get_abspath(file_spec)
+    try:
+        file_path = get_abspath(file_spec)
+    except FileNotFoundException as err:
+        print err
+        return
+    log('file path: %s' % file_path)
 
     watcher_key = '_preview_watcher'
     if not internal_dict.get(watcher_key):
@@ -313,7 +330,7 @@ def preview(debugger, command, result, internal_dict):
 
     watcher = internal_dict[watcher_key]
     watcher.add(file_path)
-    print 'Preview enabled: %s' % file_name
+    print 'Preview enabled: "%s"' % file_name
 
 
 def set_log_path(debugger, command, result, internal_dict):
@@ -325,4 +342,5 @@ def __lldb_init_module(debugger, internal_dict):
     debugger.HandleCommand('command script add -f preview.preview preview')
     debugger.HandleCommand('command script add -f preview.set_log_path setlog')
     internal_dict[NAMESPACE] = []
-    print 'The "preview" command has been installed.'
+    preview.__doc__ = USAGE
+    print 'The "preview" command has been installed, type "help preview" or "preview -h" for usage.'
