@@ -1,7 +1,9 @@
 iOS Runtime Preview
 ======================
-This tool enables an iOS app to sync with code modifications at runtime.  
-You can check the results of code modifications instantly as if an interpreter is working.
+This tool enables a running iOS app to execute modified source codes without rebuild.
+
+You can check results of modifications to source code instantly as if you are using an interpreter.  
+There is no need for compiling again after editing a source code with this tool!
 
 See video: [https://vimeo.com/87261099](https://vimeo.com/87261099)
 
@@ -17,11 +19,11 @@ The target iOS app must be compiled with a option `-O0`(default option for debug
 
 How to use
 ------------
-1. Run your iOS app from Xcode on either the iOS simulator or the iOS device.
+1. Run your iOS app from Xcode by either the iOS simulator or the iOS device.
 
     ![img1](https://raw.github.com/addsict/iOSRuntimePreview/master/img/img1.png)
 
-1. Pause program execution by clicking a pause button at debug area or keyboard shortcut `^⌘Y`.
+1. Pause execution of running app by clicking a pause button at debug area or keyboard shortcut `^⌘Y`.
 
     ![img2](https://raw.github.com/addsict/iOSRuntimePreview/master/img/img2.png)
 
@@ -30,10 +32,12 @@ How to use
 
     ![img3](https://raw.github.com/addsict/iOSRuntimePreview/master/img/img3.png)
 
-1. Then, register a source file which you want to sync with running iOS app.  
-    format: `preview <file>`
+1. Register a source file which you'll edit in runtime by below command, then clicking a play button at debug area.  
+    `Syntax: preview <file>`
 
     ![img4](https://raw.github.com/addsict/iOSRuntimePreview/master/img/img4.png)
+
+1. It's all done! You can edit a source code and that modification will be appeared in running app without compiling again.
 
 How it works
 -------------
