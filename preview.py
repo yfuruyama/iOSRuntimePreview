@@ -7,7 +7,9 @@ import threading
 import difflib
 
 USAGE = """
-Usage: preview <file>
+Sync specific source file with running iOS app.
+
+Symtax: preview <file>
 Example: preview MyViewController.m
 """
 
@@ -54,6 +56,7 @@ class Executor(object):
             target = lldb.debugger.GetSelectedTarget()
             addr = line_entry.GetStartAddress().GetLoadAddress(target)
             if addr != lldb.LLDB_INVALID_ADDRESS:
+                log('jump address: 0x%x' % addr)
                 # set program counter
                 self.frame.SetPC(addr)
 
@@ -327,7 +330,7 @@ def preview(debugger, command, result, internal_dict):
 
     watcher = internal_dict[watcher_key]
     watcher.add(file_path)
-    print 'Preview enabled: %s' % file_name
+    print 'Preview enabled: "%s"' % file_name
 
 
 def set_log_path(debugger, command, result, internal_dict):
@@ -339,4 +342,5 @@ def __lldb_init_module(debugger, internal_dict):
     debugger.HandleCommand('command script add -f preview.preview preview')
     debugger.HandleCommand('command script add -f preview.set_log_path setlog')
     internal_dict[NAMESPACE] = []
-    print 'The "preview" command has been installed.'
+    preview.__doc__ = USAGE
+    print 'The "preview" command has been installed, type "help preview" or "preview -h" for usage.'
