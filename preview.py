@@ -7,7 +7,7 @@ import threading
 import difflib
 
 USAGE = """
-Usage: preview <file path from project directory>
+Usage: preview <file>
 Example: preview MyViewController.m
 """
 
@@ -304,6 +304,7 @@ def preview(debugger, command, result, internal_dict):
     file_name = command
     file_spec = lldb.SBFileSpec(file_name)
     file_path = get_abspath(file_spec)
+    log('file path: %s' % file_path)
 
     watcher_key = '_preview_watcher'
     if not internal_dict.get(watcher_key):

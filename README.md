@@ -31,7 +31,7 @@ How to use
     ![img3](https://raw.github.com/addsict/iOSRuntimePreview/master/img/img3.png)
 
 1. Then, register a source file which you want to sync with running iOS app.  
-    format: `preview <file path from project directory>`
+    format: `preview <file>`
 
     ![img4](https://raw.github.com/addsict/iOSRuntimePreview/master/img/img4.png)
 
