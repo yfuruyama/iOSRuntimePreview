@@ -5,6 +5,8 @@ This tool enables a running iOS app to execute modified source codes without reb
 You can check instantly the result of modification to the source code as if you are using an interpreter.  
 There is no need for compiling again after editing a source code with this tool!
 
+![iOSRuntimePreviewDemo](https://raw.github.com/addsict/iOSRuntimePreview/master/img/iOSRuntimePreviewDemo.gif)
+
 See video: [https://vimeo.com/87261099](https://vimeo.com/87261099)
 
 Install
