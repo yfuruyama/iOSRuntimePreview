@@ -29,16 +29,17 @@ class Executor(object):
 
     def execute(self):
         jump = 0
-        statuses = []
+        concatenated_code = ''
         for mod_unit in self.mod_units:
             if mod_unit.is_delete():
                 jump += 1
                 continue
-            statuses.append(self._eval(self.frame, mod_unit.code))
+            concatenated_code += '%s\n' % mod_unit.code
+        result = self._eval(self.frame, concatenated_code)
 
         if jump > 0:
             self.jump_to_line(self.line + jump)
-        return statuses
+        return result
 
     def jump_to_line(self, line):
         log('Executor jumps to line: %s' % line)
