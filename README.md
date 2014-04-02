@@ -1,6 +1,6 @@
 iOS Runtime Preview
 ======================
-This tool enables a running iOS app to execute modified source codes without rebuilding them.
+This tool allows you to execute modified source codes without rebuilding a running iOS app.
 
 You can check instantly the result of modification to the source code as if you are using an interpreter.  
 There is no need for compiling again after editing a source code with this tool!
